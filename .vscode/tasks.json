@@ -1,0 +1,21 @@
+{
+    "version":"2.0.0",
+    "tasks": [
+        {
+            "label": "flash",
+            "type": "shell",
+            "command": "D:\\STM32\\CubeProgrammer\\bin\\STM32_Programmer_CLI.exe",
+            "args": [
+                "-c",
+                "port=swd",
+                "-w",
+                "${workspaceFolder}/build/Debug/M0_led_uart.elf",
+                "-v",
+                "-rst",
+            ],
+            "group": "build",
+            "problemMatcher": []
+        }
+    ]
+
+}

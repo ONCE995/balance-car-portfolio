@@ -1,0 +1,17 @@
+// {
+//   "version": "2.0.0",
+//   "tasks": [
+//     {
+//       "label": "Build",
+//       "type": "shell",
+//       "command": "cmake --build build/Debug",
+//       "group": { "kind": "build", "isDefault": true }
+//     },
+//     {
+//       "label": "Flash",
+//       "type": "shell",
+//       "command": "D:\\STM32\\CubeProgrammer\\bin\\STM32_Programmer_CLI.exe -c port=swd -w build/Debug/M0_led_uart.elf -v -rst",
+//       "dependsOn": "Build"
+//     }
+//   ]
+// }
