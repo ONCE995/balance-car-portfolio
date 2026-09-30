@@ -28,6 +28,8 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f1xx_hal.h"
+#include <stdio.h>
+#include <stdint.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -59,6 +61,10 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define LED0_Pin GPIO_PIN_13
 #define LED0_GPIO_Port GPIOC
+#define MOTOR_AIN1_Pin GPIO_PIN_0
+#define MOTOR_AIN1_GPIO_Port GPIOB
+#define MOTOR_AIN2_Pin GPIO_PIN_1
+#define MOTOR_AIN2_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

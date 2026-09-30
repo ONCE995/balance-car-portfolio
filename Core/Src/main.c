@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "tim.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -86,17 +87,20 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
-  {
-    //GPIOC->ODR ^= (1U << 13); // 置高：等价 HAL_GPIO_WritePin(.., SET) 
-    GPIOC->ODR ^= LED0_Pin;
-    HAL_Delay(500);
+  { 
+    TIM3->CCR1 = 50 ; // 占空比50%
+    HAL_Delay( 2000 );
+    TIM3->CCR1 = 20 ; // 占空比20% 
+    HAL_Delay( 2000 ); 
+    printf ( "CCR1 = %lu\r\n" , ( unsigned long )TIM3->CCR1);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
