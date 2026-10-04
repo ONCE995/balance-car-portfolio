@@ -19,26 +19,37 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "tim.h"
+#include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>
+#include <stdint.h>
+#include "pid.h"
+#include "encoder.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define dt      0.01f
+#define SIM_KP  0.5f
+#define SIM_KI  3.0f
+#define SIM_KD  0.0f
+#define ENCODER_SAMPLE_TIME 0.01f
 
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
+PID_t speed_pi;              /* 速度环 PID 控制器实例（唯一） */
+float target_speed = 30.0f;      // 目标转速，后期可改为角度/闭环输入
+float real_speed;            // 编码器实测转速（rpm）
+extern volatile int flag_pid;         // 由 TIM4 中断置位，表示新的采样点就绪
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -55,7 +66,10 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+int __io_putchar( int ch){        /* 重定向 */
+    HAL_UART_Transmit(&huart1, ( uint8_t *)&ch, 1 , HAL_MAX_DELAY);   /* printf打印输出到串口 */
+    return ch;
+}
 /* USER CODE END 0 */
 
 /**
@@ -88,19 +102,38 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_TIM3_Init();
+  MX_TIM4_Init();
+  MX_TIM2_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_1);
+  PID_Init(&speed_pi, SIM_KP, SIM_KI, 0.0f, 100.0f); /* 初始化唯一实例 */
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+  HAL_TIM_Base_Start_IT(&htim4);   /* 启动 TIM4 定时中断(10ms) */
+  HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
+  //__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0); /* 初始占空比 0% */
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   { 
+
     TIM3->CCR1 = 50 ; // 占空比50%
     HAL_Delay( 2000 );
+    printf ( "CCR1 = %lu\r\n" , ( unsigned long )TIM3->CCR1);
     TIM3->CCR1 = 20 ; // 占空比20% 
     HAL_Delay( 2000 ); 
     printf ( "CCR1 = %lu\r\n" , ( unsigned long )TIM3->CCR1);
+
+    /*占空比统一由 PID 输出驱动*/
+    // if(flag_pid)
+    // {
+    //   flag_pid = 0;   /* 复位标志*/
+    //   real_speed = Encoder_Getspeed();
+    //   float pwm_out = PID_Calc(&speed_pi, target_speed, real_speed, ENCODER_SAMPLE_TIME);
+    //   __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, pwm_out);
+    //   printf("target=%.2f real=%.2f pwm=%.2f\r\n", target_speed, real_speed, pwm_out);
+    // }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
