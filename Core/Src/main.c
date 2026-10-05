@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include "pid.h"
 #include "encoder.h"
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -66,9 +67,18 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-int __io_putchar( int ch){        /* 重定向 */
-    HAL_UART_Transmit(&huart1, ( uint8_t *)&ch, 1 , HAL_MAX_DELAY);   /* printf打印输出到串口 */
-    return ch;
+void Vofa_SendJustFloat(float *ch,uint8_t num)
+{
+  uint8_t frame[8 * 4 + 4];
+  uint8_t idx = 0;
+  for(uint8_t i=0;i<num;i++)
+  {
+    memcpy(frame + idx, (uint8_t *)(ch+i), 4); 
+    idx += 4;
+  }
+  frame[idx++] = 0x00;frame[idx++] = 0x00;
+  frame[idx++] = 0x80;frame[idx++] = 0x7F;
+  HAL_UART_Transmit(&huart1, frame, idx, HAL_MAX_DELAY);
 }
 /* USER CODE END 0 */
 
@@ -110,30 +120,23 @@ int main(void)
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
   HAL_TIM_Base_Start_IT(&htim4);   /* 启动 TIM4 定时中断(10ms) */
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
-  //__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0); /* 初始占空比 0% */
+  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0); /* 初始占空比 0% */
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
-  { 
-
-    TIM3->CCR1 = 50 ; // 占空比50%
-    HAL_Delay( 2000 );
-    printf ( "CCR1 = %lu\r\n" , ( unsigned long )TIM3->CCR1);
-    TIM3->CCR1 = 20 ; // 占空比20% 
-    HAL_Delay( 2000 ); 
-    printf ( "CCR1 = %lu\r\n" , ( unsigned long )TIM3->CCR1);
-
+  {
     /*占空比统一由 PID 输出驱动*/
-    // if(flag_pid)
-    // {
-    //   flag_pid = 0;   /* 复位标志*/
-    //   real_speed = Encoder_Getspeed();
-    //   float pwm_out = PID_Calc(&speed_pi, target_speed, real_speed, ENCODER_SAMPLE_TIME);
-    //   __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, pwm_out);
-    //   printf("target=%.2f real=%.2f pwm=%.2f\r\n", target_speed, real_speed, pwm_out);
-    // }
+    if(flag_pid)
+    {
+      flag_pid = 0;   /* 复位标志*/
+      real_speed = Encoder_Getspeed();
+      float pwm_out = PID_Calc(&speed_pi, target_speed, real_speed, ENCODER_SAMPLE_TIME);
+      __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, pwm_out);
+      float frame[3] = {target_speed, real_speed, pwm_out};
+      Vofa_SendJustFloat(frame, 3);
+    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
