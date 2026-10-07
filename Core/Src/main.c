@@ -38,9 +38,10 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define dt      0.01f
-#define SIM_KP  0.5f
-#define SIM_KI  3.0f
+#define SIM_KP  2.0f
+#define SIM_KI  0.2f
 #define SIM_KD  0.0f
+#define SIM_KAW 0.5f
 #define ENCODER_SAMPLE_TIME 0.01f
 
 /* USER CODE END PD */
@@ -48,7 +49,7 @@
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 PID_t speed_pi;              /* 速度环 PID 控制器实例（唯一） */
-float target_speed = 30.0f;      // 目标转速，后期可改为角度/闭环输入
+float target_speed = 20.0f;      // 目标转速，后期可改为角度/闭环输入
 float real_speed;            // 编码器实测转速（rpm）
 extern volatile int flag_pid;         // 由 TIM4 中断置位，表示新的采样点就绪
 /* USER CODE END PM */
@@ -80,6 +81,11 @@ void Vofa_SendJustFloat(float *ch,uint8_t num)
   frame[idx++] = 0x80;frame[idx++] = 0x7F;
   HAL_UART_Transmit(&huart1, frame, idx, HAL_MAX_DELAY);
 }
+
+void __io_putchar(int ch)
+{
+  HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+} 
 /* USER CODE END 0 */
 
 /**
@@ -116,10 +122,12 @@ int main(void)
   MX_TIM2_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  PID_Init(&speed_pi, SIM_KP, SIM_KI, 0.0f, 100.0f); /* 初始化唯一实例 */
+  PID_Init(&speed_pi, SIM_KP, SIM_KI, SIM_KAW, -100.0f, 100.0f); /* 初始化唯一实例 */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
   HAL_TIM_Base_Start_IT(&htim4);   /* 启动 TIM4 定时中断(10ms) */
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
+  HAL_GPIO_WritePin(MOTOR_AIN1_GPIO_Port, MOTOR_AIN1_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(MOTOR_AIN2_GPIO_Port, MOTOR_AIN2_Pin, GPIO_PIN_RESET);
   __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0); /* 初始占空比 0% */
   /* USER CODE END 2 */
 
@@ -133,8 +141,19 @@ int main(void)
       flag_pid = 0;   /* 复位标志*/
       real_speed = Encoder_Getspeed();
       float pwm_out = PID_Calc(&speed_pi, target_speed, real_speed, ENCODER_SAMPLE_TIME);
-      __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, pwm_out);
-      float frame[3] = {target_speed, real_speed, pwm_out};
+      float duty;
+      if (pwm_out >= 0.0f )
+      {
+          HAL_GPIO_WritePin(MOTOR_AIN1_GPIO_Port, MOTOR_AIN1_Pin, GPIO_PIN_SET);
+          HAL_GPIO_WritePin(MOTOR_AIN2_GPIO_Port, MOTOR_AIN2_Pin, GPIO_PIN_RESET);
+          duty = pwm_out;
+      } else {
+          HAL_GPIO_WritePin(MOTOR_AIN1_GPIO_Port, MOTOR_AIN1_Pin, GPIO_PIN_RESET);
+          HAL_GPIO_WritePin(MOTOR_AIN2_GPIO_Port, MOTOR_AIN2_Pin, GPIO_PIN_SET);
+          duty = -pwm_out;
+      }
+      __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, duty);
+      float frame[ 3 ] = {target_speed, real_speed, pwm_out};
       Vofa_SendJustFloat(frame, 3);
     }
     /* USER CODE END WHILE */
