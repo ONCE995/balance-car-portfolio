@@ -37,20 +37,28 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define dt      0.01f
+/*速度环*/
 #define SIM_KP  2.0f
 #define SIM_KI  0.2f
-#define SIM_KD  0.0f
 #define SIM_KAW 0.5f
 #define ENCODER_SAMPLE_TIME 0.01f
+/*位置环*/
+#define POS_KP  1.67f
+#define POS_KI  0.0f
+#define POS_KAW 0.0f
+#define POS_OUT_MAX 25.0f
+
 
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 PID_t speed_pi;              /* 速度环 PID 控制器实例（唯一） */
-float target_speed = 20.0f;      // 目标转速，后期可改为角度/闭环输入
 float real_speed;            // 编码器实测转速（rpm）
+
+PID_t angle_p;              /* 角度环 PID 控制器实例（唯一） */
+float target_angle = 90.0f;      // 目标角度，后期可改为角度/闭环输入
+float real_angle;            // 编码器实测角度（度）
 extern volatile int flag_pid;         // 由 TIM4 中断置位，表示新的采样点就绪
 /* USER CODE END PM */
 
@@ -122,7 +130,8 @@ int main(void)
   MX_TIM2_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  PID_Init(&speed_pi, SIM_KP, SIM_KI, SIM_KAW, -100.0f, 100.0f); /* 初始化唯一实例 */
+  PID_Init(&speed_pi, SIM_KP, SIM_KI, SIM_KAW, -100.0f, 100.0f); /* 初始化转速实例 */
+  PID_Init(&angle_p, POS_KP, POS_KI, POS_KAW, -POS_OUT_MAX, POS_OUT_MAX); /* 初始化角度实例 */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
   HAL_TIM_Base_Start_IT(&htim4);   /* 启动 TIM4 定时中断(10ms) */
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
@@ -135,11 +144,16 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    /*占空比统一由 PID 输出驱动*/
+  /*占空比统一由 PID 输出驱动*/
     if(flag_pid)
     {
       flag_pid = 0;   /* 复位标志*/
+
+      Encoder_Update();   /*更新编码器计数*/
+      real_angle = Encoder_GetAngle();
       real_speed = Encoder_Getspeed();
+
+      float target_speed = PID_Calc(&angle_p, target_angle, real_angle, ENCODER_SAMPLE_TIME);
       float pwm_out = PID_Calc(&speed_pi, target_speed, real_speed, ENCODER_SAMPLE_TIME);
       float duty;
       if (pwm_out >= 0.0f )
@@ -153,12 +167,12 @@ int main(void)
           duty = -pwm_out;
       }
       __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, duty);
-      float frame[ 3 ] = {target_speed, real_speed, pwm_out};
-      Vofa_SendJustFloat(frame, 3);
+      float frame[ 4 ] = {target_angle, real_angle, target_speed, pwm_out};
+      Vofa_SendJustFloat(frame, 4);
     }
-    /* USER CODE END WHILE */
+      /* USER CODE END WHILE */
 
-    /* USER CODE BEGIN 3 */
+      /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
 }
