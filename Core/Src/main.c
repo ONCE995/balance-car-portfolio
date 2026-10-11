@@ -29,6 +29,7 @@
 #include "pid.h"
 #include "encoder.h"
 #include <string.h>
+#include "i2c_soft.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -129,6 +130,9 @@ int main(void)
   MX_TIM4_Init();
   MX_TIM2_Init();
   MX_USART1_UART_Init();
+  i2c_soft_init();
+  DWT_Delay_Init();
+
   /* USER CODE BEGIN 2 */
   PID_Init(&speed_pi, SIM_KP, SIM_KI, SIM_KAW, -100.0f, 100.0f); /* 初始化转速实例 */
   PID_Init(&angle_p, POS_KP, POS_KI, POS_KAW, -POS_OUT_MAX, POS_OUT_MAX); /* 初始化角度实例 */
