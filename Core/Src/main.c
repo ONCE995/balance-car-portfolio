@@ -30,6 +30,7 @@
 #include "encoder.h"
 #include <string.h>
 #include "i2c_soft.h"
+#include "as5600.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -130,10 +131,9 @@ int main(void)
   MX_TIM4_Init();
   MX_TIM2_Init();
   MX_USART1_UART_Init();
-  i2c_soft_init();
-  DWT_Delay_Init();
-
   /* USER CODE BEGIN 2 */
+  DWT_Delay_Init(); /* 初始化 DWT 延时函数 */
+  i2c_soft_init();       /* 初始化 I2C 软件模拟 */
   PID_Init(&speed_pi, SIM_KP, SIM_KI, SIM_KAW, -100.0f, 100.0f); /* 初始化转速实例 */
   PID_Init(&angle_p, POS_KP, POS_KI, POS_KAW, -POS_OUT_MAX, POS_OUT_MAX); /* 初始化角度实例 */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
@@ -148,35 +148,40 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    float angle = AS5600_ReadAngle() * 360.0f / 4096.0f ;
+    float frame[ 1 ] = {angle};
+    Vofa_SendJustFloat(frame, 1 );
+    HAL_Delay( 10 );
+
   /*占空比统一由 PID 输出驱动*/
-    if(flag_pid)
-    {
-      flag_pid = 0;   /* 复位标志*/
+    // if(flag_pid)
+    // {
+    //   flag_pid = 0;   /* 复位标志*/
 
-      Encoder_Update();   /*更新编码器计数*/
-      real_angle = Encoder_GetAngle();
-      real_speed = Encoder_Getspeed();
+    //   Encoder_Update();   /*更新编码器计数*/
+    //   real_angle = Encoder_GetAngle();
+    //   real_speed = Encoder_Getspeed();
 
-      float target_speed = PID_Calc(&angle_p, target_angle, real_angle, ENCODER_SAMPLE_TIME);
-      float pwm_out = PID_Calc(&speed_pi, target_speed, real_speed, ENCODER_SAMPLE_TIME);
-      float duty;
-      if (pwm_out >= 0.0f )
-      {
-          HAL_GPIO_WritePin(MOTOR_AIN1_GPIO_Port, MOTOR_AIN1_Pin, GPIO_PIN_SET);
-          HAL_GPIO_WritePin(MOTOR_AIN2_GPIO_Port, MOTOR_AIN2_Pin, GPIO_PIN_RESET);
-          duty = pwm_out;
-      } else {
-          HAL_GPIO_WritePin(MOTOR_AIN1_GPIO_Port, MOTOR_AIN1_Pin, GPIO_PIN_RESET);
-          HAL_GPIO_WritePin(MOTOR_AIN2_GPIO_Port, MOTOR_AIN2_Pin, GPIO_PIN_SET);
-          duty = -pwm_out;
-      }
-      __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, duty);
-      float frame[ 4 ] = {target_angle, real_angle, target_speed, pwm_out};
-      Vofa_SendJustFloat(frame, 4);
-    }
-      /* USER CODE END WHILE */
+    //   float target_speed = PID_Calc(&angle_p, target_angle, real_angle, ENCODER_SAMPLE_TIME);
+    //   float pwm_out = PID_Calc(&speed_pi, target_speed, real_speed, ENCODER_SAMPLE_TIME);
+    //   float duty;
+    //   if (pwm_out >= 0.0f )
+    //   {
+    //       HAL_GPIO_WritePin(MOTOR_AIN1_GPIO_Port, MOTOR_AIN1_Pin, GPIO_PIN_SET);
+    //       HAL_GPIO_WritePin(MOTOR_AIN2_GPIO_Port, MOTOR_AIN2_Pin, GPIO_PIN_RESET);
+    //       duty = pwm_out;
+    //   } else {
+    //       HAL_GPIO_WritePin(MOTOR_AIN1_GPIO_Port, MOTOR_AIN1_Pin, GPIO_PIN_RESET);
+    //       HAL_GPIO_WritePin(MOTOR_AIN2_GPIO_Port, MOTOR_AIN2_Pin, GPIO_PIN_SET);
+    //       duty = -pwm_out;
+    //   }
+    //   __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, duty);
+    //   float frame[ 4 ] = {target_angle, real_angle, target_speed, pwm_out};
+    //   Vofa_SendJustFloat(frame, 4);
+    // }
+    /* USER CODE END WHILE */
 
-      /* USER CODE BEGIN 3 */
+    /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
 }

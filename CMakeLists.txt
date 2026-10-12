@@ -48,6 +48,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/encoder.c
     Core/Src/pid.c
     Core/Src/i2c_soft.c
+    Core/Src/as5600.c
 )
 
 # Add include paths

@@ -1,27 +1,31 @@
 #include "i2c_soft.h"
 
-#define SCL_H()     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET)  
-#define SCL_L()     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET)  
-#define SDA_H()     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET)  
-#define SDA_L()     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET)
-#define SDA_READ()  HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_7)
-
 static uint32_t cycles_per_us = 0;
 
 void i2c_soft_init(void)
 {
-    __HAL_RCC_GPIOB_CLK_ENABLE();
+    __HAL_RCC_GPIOB_CLK_ENABLE();                 /* 打开 GPIOB 时钟 */
 
     GPIO_InitTypeDef GPIO_InitStruct = {0};
-    GPIO_InitStruct.Pin = GPIO_PIN_6;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+
+    /* 优化点1（对比第一版/哈希8eec04d）：第一版漏设 Speed，
+     * 导致 STM32F1 的 MODE[1:0] = 00，引脚实际被配成了“输入”而非“输出”，
+     * 整条 I2C 总线被两个上拉电阻钳死在 3.3V 恒定高电平，SCL/SDA 永远拉不低。
+     * 这里必须显式指定 Speed（如 LOW=2MHz），引脚才会真正进入输出模式。 */
+    GPIO_InitStruct.Pin   = GPIO_PIN_6;           /* PB6 -> SCL，I2C 时钟线 */
+    GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;  /* 推挽输出：SCL 由 MCU 强驱动拉高拉低 */
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-    GPIO_InitStruct.Pin = GPIO_PIN_7;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+    GPIO_InitStruct.Pin   = GPIO_PIN_7;           /* PB7 -> SDA，I2C 数据线 */
+    GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_OD;  /* 开漏输出：配合外部上拉电阻实现线与、双向 */
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6 | GPIO_PIN_7, GPIO_PIN_SET); // Set both pins high
+    /* 优化点2：显式把两根线初始化到空闲高电平（I2C 总线空闲态），并
+     * 在 OS 内核模型上保证软件模拟 I2C 的起点是“总线释放”状态。 */
+    SCL_H();
+    SDA_H();
 }
 
 void DWT_Delay_Init(void)
@@ -41,8 +45,8 @@ static void I2C_DelayUs(uint32_t us)
     while (DWT->CYCCNT < us * cycles_per_us);
 }
 
-void i2c_start(void){SDA_H();SCL_H();I2C_DelayUs(5);SDA_L();I2C_DelayUs(5);SCL_L();}
-void i2c_stop(void){SDA_L();SCL_H();I2C_DelayUs(5);SDA_H();I2C_DelayUs(5);}
+void i2c_start(void){SDA_H();SCL_H();I2C_DelayUs(10);SDA_L();I2C_DelayUs(10);SCL_L();}
+void i2c_stop(void){SDA_L();SCL_H();I2C_DelayUs(10);SDA_H();I2C_DelayUs(10);}
 
 /* @brief  向 I2C 总线写入一个字节，并读取从设备的 ACK/NACK 响应。
   * @param  从设备的 ACK/NACK 响应（0 表示 ACK，1 表示 NACK）。
@@ -53,12 +57,12 @@ uint8_t I2C_WriteByte(uint8_t data)
     for(int i=7;i>=0;i--)
     {
         (data & (1 << i))? SDA_H(): SDA_L();
-        I2C_DelayUs(5);
-        SCL_H();I2C_DelayUs(5);     /* 上升沿，从机采样 */
+        I2C_DelayUs(10);
+        SCL_H();I2C_DelayUs(10);     /* 上升沿，从机采样 */
         SCL_L();
     }
-    SDA_H();I2C_DelayUs(5);         /* 释放 SDA，等待 ACK/NACK */
-    SCL_H();I2C_DelayUs(5);
+    SDA_H();I2C_DelayUs(10);         /* 释放 SDA，等待 ACK/NACK */
+    SCL_H();I2C_DelayUs(10);
     uint8_t ack = SDA_READ();
     SCL_L();
     return ack;
@@ -71,31 +75,18 @@ uint8_t I2C_WriteByte(uint8_t data)
 uint8_t I2C_ReadByte(uint8_t ack_in)
 {
     uint8_t data = 0;
-    SDA_H();
+    SDA_H();                                /* 释放 SDA，准备读取数据 */
+    I2C_DelayUs(10);
     for(int i=7;i>=0;i--)
     {
-        SCL_H();I2C_DelayUs(5);
+        SCL_H();I2C_DelayUs(10);
         if(SDA_READ()) data |= (1 << i);    /* 读取并设置数据变量中的位 */
-        SCL_L();I2C_DelayUs(5);
+        SCL_L();I2C_DelayUs(10);
     }
     (ack_in)? SDA_H(): SDA_L();             /* 发送 ACK/NACK */
-    I2C_DelayUs(5);
-    SCL_H();I2C_DelayUs(5);
-    SCL_L();I2C_DelayUs(5);
+    I2C_DelayUs(10);
+    SCL_H();I2C_DelayUs(10);
+    SCL_L();I2C_DelayUs(10);
     SDA_H();                                /* 释放 SDA */
     return data;
-}
-
-uint16_t AS5600_ReadAngle(void)
-{
-    uint16_t high_byte, low_byte;
-    i2c_start();
-    I2C_WriteByte(0x36 << 1 | 0);            /* 发送设备地址（写操作）*/
-    I2C_WriteByte(0x0C);                    /* 发送寄存器地址（角度高字节寄存器）*/
-    i2c_start();
-    I2C_WriteByte(0x36 << 1 | 1);         /* 发送设备地址（读操作）*/
-    high_byte = I2C_ReadByte(0);         /* 读取高字节并发送 ACK */
-    low_byte = I2C_ReadByte(1);         /* 读取低字节并发送 NACK */
-    i2c_stop();
-    return ((high_byte << 8) | low_byte) & 0x0FFF; /* 返回 12 位角度值，只有12位有效，前4位为0 */
 }
